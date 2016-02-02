@@ -1,4 +1,4 @@
-// glgen.cpp - v0.1 - Generates OpenGL header file - Public Domain
+// glgen.cpp - v0.2 - Generates OpenGL header file - Public Domain
 // Metric Panda 2016 - http://metricpanda.com
 //
 // Command line utility that generates an OpenGL header file that contains
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     GLSettings Settings = {};
     if (ParseCommandLine(&Settings, argc, argv))
     {
-      GenerateOpenGLHeader(&Settings);
+      Result = GenerateOpenGLHeader(&Settings);
     }
     else
     {
@@ -662,7 +662,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
   char* ArbData = ReadEntireFile(Settings->Header);
   FILE* Output = fopen(Settings->Output, "w");
   const char* ProcPrefix = "GEN_";
-  int Success = 0;
+  int Success = -1;
 
   if (Settings->InputCount <= 0)
   {
@@ -890,7 +890,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
             char Name[512];
             UpperCase(Name, ArbToken->FunctionName);
             char Buffer[512];
-            int Length = sprintf(Buffer, "PFN%sPROC %s%.*s;\n", Name, ProcPrefix,
+            int Length = sprintf(Buffer, "static PFN%sPROC %s%.*s;\n", Name, ProcPrefix,
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars);
 
             fwrite(Buffer, (size_t)Length, 1, Output);
@@ -920,8 +920,8 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           "#elif defined(__APPLE__) || defined(__APPLE_CC__)\n"
           "#include <Carbon/Carbon.h>\n"
           "\n"
-          "CFBundleRef GEN_Bundle;\n"
-          "CFURLRef GEN_BundleURL;\n"
+          "static CFBundleRef GEN_Bundle;\n"
+          "static CFURLRef GEN_BundleURL;\n"
           "\n"
           "static void %sLoadOpenGL()\n"
           "{\n"
@@ -1013,7 +1013,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           "#endif // INCLUDE_OPENGL_GENERATED_H\n";
         fprintf(Output, Generated, Prefix);
       }
-      Success = true;
+      Success = 0;
       printf(GREEN("Completed!") " " GREEN("%u") " functions - " GREEN("%u") " defines - " GREEN("%u") " ARB tokens\n",
              FunctionCount, DefinesCount, ArbTokenCount);
     }
@@ -1033,6 +1033,6 @@ int GenerateOpenGLHeader(GLSettings* Settings)
     free(ArbData);
   }
 
-  return 0;
+  return Success;
 }
 
