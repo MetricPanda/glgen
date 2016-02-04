@@ -116,7 +116,7 @@ static
 unsigned long long GetLastWriteTime(const char* Filename)
 {
   unsigned long long Result = 0;
-#if MSVC
+#if _MSC_VER
   FILETIME LastWriteTime = {};
   WIN32_FILE_ATTRIBUTE_DATA Data;
   if(GetFileAttributesEx(Filename, GetFileExInfoStandard, &Data))
