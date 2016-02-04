@@ -21,6 +21,15 @@
 #include <assert.h> // assert
 #include <ctype.h> // toupper
 
+#if MSVC
+  #define _CRT_SECURE_NO_WARNINGS 1
+  #define WIN32_LEAN_AND_MEAN 1
+  #define VC_EXTRALEAN 1
+  #include <windows.h> // GetFileAttributesEx
+#else
+  #include <sys/stat.h> // stat
+#endif
+
 struct GLSettings
 {
   char* Header;
@@ -28,6 +37,7 @@ struct GLSettings
   char* Prefix;
   char** Inputs;
   char** Ignores;
+  unsigned long long WriteTimestamp;
   int InputCount;
   int IgnoreCount;
   int Boilerplate;
@@ -38,6 +48,9 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv);
 
 static
 int GenerateOpenGLHeader(GLSettings* Settings);
+
+static
+unsigned long long GetLastWriteTime(const char* Filename);
 
 static
 void FreeMemory(GLSettings* Settings);
@@ -70,7 +83,21 @@ int main(int argc, char** argv)
     GLSettings Settings = {};
     if (ParseCommandLine(&Settings, argc, argv))
     {
-      Result = GenerateOpenGLHeader(&Settings);
+      Settings.WriteTimestamp = GetLastWriteTime(Settings.Output);
+      unsigned long long MaxTimestamp = 0;
+      for (int Index = 0; Index < Settings.InputCount; ++Index)
+      {
+        const char* InputFilename = Settings.Inputs[Index];
+        unsigned long long LastWriteTime = GetLastWriteTime(InputFilename);
+        if (LastWriteTime > MaxTimestamp)
+        {
+          MaxTimestamp = LastWriteTime;
+        }
+      }
+      if (MaxTimestamp > Settings.WriteTimestamp)
+      {
+        Result = GenerateOpenGLHeader(&Settings);
+      }
     }
     else
     {
@@ -80,6 +107,28 @@ int main(int argc, char** argv)
     FreeMemory(&Settings);
   }
 
+  return Result;
+}
+
+static
+unsigned long long GetLastWriteTime(const char* Filename)
+{
+  unsigned long long Result = 0;
+#if MSVC
+  FILETIME LastWriteTime = {};
+  WIN32_FILE_ATTRIBUTE_DATA Data;
+  if(GetFileAttributesEx(Filename, GetFileExInfoStandard, &Data))
+  {
+    LastWriteTime = Data.ftLastWriteTime;
+  }
+  Result = ((unsigned long long)LastWriteTime.dwLowDateTime) | ((unsigned long long)LastWriteTime.dwHighDateTime << 32);
+#else
+  struct stat FileStat;
+  if (stat(Filename, &FileStat) == 0)
+  {
+    Result = (unsigned long long)FileStat.st_mtimespec.tv_sec;
+  }
+#endif
   return Result;
 }
 
@@ -766,8 +815,9 @@ int GenerateOpenGLHeader(GLSettings* Settings)
       const char* Generated =
         "#ifndef INCLUDE_OPENGL_GENERATED_H\n"
         "#define INCLUDE_OPENGL_GENERATED_H\n\n"
-        "// NOTE: This file is generated automatically. Do not edit.\n\n";
-      fprintf(Output, "%s", Generated);
+        "// NOTE: This file is generated automatically. Do not edit.\n"
+        "// @GENERATED: %llu\n\n";
+      fprintf(Output, Generated, Settings->WriteTimestamp);
 
       Generated =
         "struct %sOpenGLVersion\n"
