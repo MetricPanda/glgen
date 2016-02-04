@@ -41,6 +41,7 @@ struct GLSettings
   int InputCount;
   int IgnoreCount;
   int Boilerplate;
+  int Silent;
 };
 
 static
@@ -65,6 +66,7 @@ void PrintHelp(char** argv)
   printf("  %-20s Generated file containing typedefs and boilerplate code\n", "-o <filename>");
   printf("\noptional arguments:\n");
   printf("  %-20s Prints this help and exits\n", "-h");
+  printf("  %-20s Suppress non error output.\n", "-silent");
   printf("  %-20s Function prefix for boilerplate code.\n", "-p <prefix>");
   printf("  %-20s Ignored tokens (comma separated).\n", "-i <token1,token2>");
   printf("  %-20s Don't generate OpenGL loading boilerplate code\n", "-no-b");
@@ -163,7 +165,7 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
   int* InputPositions = (int*)malloc(InputMaxSize);
   memset(InputPositions, -1, InputMaxSize);
 
-  Settings->Boilerplate = true;
+  Settings->Boilerplate = 1;
   char* Ignores = 0;
   for (int Index = 1; Index < argc; ++Index)
   {
@@ -173,7 +175,7 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
       char* Option = Arg+1;
       if (strcmp(Option, "h") == 0)
       {
-        ShowHelp = true;
+        ShowHelp = 1;
         break;
       }
       else if (strcmp(Option, "o") == 0 && Index < argc-1)
@@ -190,7 +192,11 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
       }
       else if (strcmp(Option, "no-b") == 0)
       {
-        Settings->Boilerplate = false;
+        Settings->Boilerplate = 0;
+      }
+      else if (strcmp(Option, "silent") == 0)
+      {
+        Settings->Silent = 1;
       }
       else if (strcmp(Option, "i") == 0)
       {
@@ -626,13 +632,13 @@ char* ReadEntireFile(const char* Filename)
     }
     else
     {
-      printf("File is empty: %s", Filename);
+      fprintf(stderr, "File is empty: %s", Filename);
     }
     fclose(File);
   }
   else
   {
-    printf("Couldn't open file: %s", Filename);
+    fprintf(stderr, "Couldn't open file: %s", Filename);
   }
   return Result;
 }
@@ -644,7 +650,7 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
   GLArbToken* ArbToken = GetToken(ArbHash, Token->Hash);
   if (ArbToken)
   {
-    Found = true;
+    Found = 1;
   }
   else
   {
@@ -652,13 +658,13 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
     {
       if (Equal(&Token->Value, Settings->Ignores[IgnoredIndex]))
       {
-        Found = true;
+        Found = 1;
         break;
       }
     }
     if (!Found)
     {
-      printf(YELLOW("WARNING") ": Token not found in header: %.*s\n",
+      fprintf(stderr, YELLOW("WARNING") ": Token not found in header: %.*s\n",
              Token->Value.Length, Token->Value.Chars);
     }
   }
@@ -695,7 +701,7 @@ int ParseFile(const char* Filename, GLArbToken* ArbHash,
       }
     }
     free(Data);
-    Success = true;
+    Success = 1;
   }
   else
   {
@@ -715,7 +721,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
 
   if (Settings->InputCount <= 0)
   {
-    printf("Invalid input count");
+    fprintf(stderr, "Invalid input count");
   }
   else if (Output && ArbData)
   {
@@ -977,7 +983,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           "{\n"
           "  GEN_BundleURL = CFURLCreateWithFileSystemPath(kCFAllocatorDefault,\n"
           "    CFSTR(\"/System/Library/Frameworks/OpenGL.framework\"),\n"
-          "    kCFURLPOSIXPathStyle, true);\n"
+          "    kCFURLPOSIXPathStyle, 1);\n"
           "  GEN_Bundle = CFBundleCreate(kCFAllocatorDefault, GEN_BundleURL);\n"
           "}\n"
           "static void %sUnloadOpenGL()\n"
@@ -1064,12 +1070,18 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         fprintf(Output, Generated, Prefix);
       }
       Success = 0;
-      printf(GREEN("Completed!") " " GREEN("%u") " functions - " GREEN("%u") " defines - " GREEN("%u") " ARB tokens\n",
-             FunctionCount, DefinesCount, ArbTokenCount);
+      if (!Settings->Silent)
+      {
+        printf(GREEN("Completed!") " " GREEN("%u") " functions - " GREEN("%u") " defines - " GREEN("%u") " ARB tokens\n",
+               FunctionCount, DefinesCount, ArbTokenCount);
+      }
     }
     else
     {
-      printf("Nothing to do");
+      if (!Settings->Silent)
+      {
+        printf("Nothing to do");
+      }
     }
   }
 
