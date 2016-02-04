@@ -21,7 +21,7 @@
 #include <assert.h> // assert
 #include <ctype.h> // toupper
 
-#if MSVC
+#if _MSC_VER
   #define _CRT_SECURE_NO_WARNINGS 1
   #define WIN32_LEAN_AND_MEAN 1
   #define VC_EXTRALEAN 1
