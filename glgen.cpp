@@ -14,7 +14,6 @@
 //    -o opengl.generated.h \
 //    -i glfwGetFramebufferSize,glfwMakeContextCurrent,glfwSwapInterval
 
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -600,17 +599,13 @@ int TokenComparer(const void* A, const void* B)
   GLToken* T1 = (GLToken*)A;
   GLToken* T2 = (GLToken*)B;
   int Result = 0;
-  if (!T1->Hash)
-  {
-    Result = 1;
-  }
-  else if (!T2->Hash)
+  if (T1->Hash > T2->Hash)
   {
     Result = -1;
   }
-  else
+  else if (T2->Hash > T1->Hash)
   {
-    Result = T1->Hash > T2->Hash;
+    Result = 1;
   }
   return Result;
 }
@@ -946,7 +941,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
             char Name[512];
             UpperCase(Name, ArbToken->FunctionName);
             char Buffer[512];
-            int Length = sprintf(Buffer, "static PFN%sPROC %s%.*s;\n", Name, ProcPrefix,
+            int Length = sprintf(Buffer, "PFN%sPROC %s%.*s;\n", Name, ProcPrefix,
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars);
 
             fwrite(Buffer, (size_t)Length, 1, Output);
@@ -955,7 +950,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
 
         Generated =
           "\n\n"
-          "typedef void (*%sOpenGLProc)();\n\n"
+          "typedef void (*%sOpenGLProc)(void);\n\n"
           "#ifdef _WIN32\n"
           "static HMODULE %sOpenGLHandle;\n"
           "static void %sLoadOpenGL()\n"
