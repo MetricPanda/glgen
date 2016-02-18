@@ -1,4 +1,5 @@
-// glgen.cpp - v0.2 - Generates OpenGL header file - Public Domain
+/*
+// glgen.cpp - v0.3 - Generates OpenGL header file - Public Domain
 // Metric Panda 2016 - http://metricpanda.com
 //
 // Command line utility that generates an OpenGL header file that contains
@@ -13,8 +14,8 @@
 //    glgen source1.h source1.cpp source2.cpp -gl glcorearb.h \
 //    -o opengl.generated.h \
 //    -i glfwGetFramebufferSize,glfwMakeContextCurrent,glfwSwapInterval
+*/
 
-#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,8 @@
 
 struct GLSettings
 {
-  char* Header;
+  char* HeadersStart;
+  char* HeadersEnd;
   char* Output;
   char* Prefix;
   char** Inputs;
@@ -61,7 +63,7 @@ void PrintHelp(char** argv)
 {
   printf("Usage: %s [-h] -gl <registryfile> -o <outputfile> <inputfiles...>\n", argv[0]);
   printf("\nrequired arguments:\n");
-  printf("  %-20s OpenGL header file downloaded from https://www.opengl.org/registry/\n", "-gl <filename>");
+  printf("  %-20s OpenGL header files (comma separated) downloaded from https://www.opengl.org/registry/\n", "-gl <filename1>,<filename2>");
   printf("  %-20s One or more input C/C++ files\n", "<inputfiles...>");
   printf("  %-20s Generated file containing typedefs and boilerplate code\n", "-o <filename>");
   printf("\noptional arguments:\n");
@@ -124,11 +126,17 @@ unsigned long long GetLastWriteTime(const char* Filename)
     LastWriteTime = Data.ftLastWriteTime;
   }
   Result = ((unsigned long long)LastWriteTime.dwLowDateTime) | ((unsigned long long)LastWriteTime.dwHighDateTime << 32);
-#else
+#elif __APPLE__
   struct stat FileStat;
   if (stat(Filename, &FileStat) == 0)
   {
     Result = (unsigned long long)FileStat.st_mtimespec.tv_sec;
+  }
+#else
+  struct stat FileStat;
+  if (stat(Filename, &FileStat) == 0)
+  {
+    Result = (unsigned long long)FileStat.st_mtime;
   }
 #endif
   return Result;
@@ -184,7 +192,17 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
       }
       else if (strcmp(Option, "gl") == 0 && Index < argc-1)
       {
-        Settings->Header = argv[++Index];
+        Settings->HeadersStart = argv[++Index];
+        char* At = Settings->HeadersStart;
+        while(*At)
+        {
+          if (*At == ',')
+          {
+            *At = 0;
+          }
+          At++;
+        }
+        Settings->HeadersEnd = At;
       }
       else if (strcmp(Option, "p") == 0 && Index < argc-1)
       {
@@ -275,7 +293,7 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
       }
       Settings->IgnoreCount = ActualCount;
     }
-    if (Settings->Header && Settings->Output && Settings->InputCount > 0)
+    if (Settings->HeadersStart && Settings->Output && Settings->InputCount > 0)
     {
       Success = 1;
     }
@@ -316,6 +334,7 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
 #endif
 #define YELLOW(Text) TermColorYellow Text TermColorReset
 #define GREEN(Text) TermColorGreen Text TermColorReset
+#define PRI_STR ".*s"
 
 
 struct GLString
@@ -600,22 +619,18 @@ int TokenComparer(const void* A, const void* B)
   GLToken* T1 = (GLToken*)A;
   GLToken* T2 = (GLToken*)B;
   int Result = 0;
-  if (!T1->Hash)
-  {
-    Result = 1;
-  }
-  else if (!T2->Hash)
+  if (T1->Hash > T2->Hash)
   {
     Result = -1;
   }
-  else
+  else if (T2->Hash > T1->Hash)
   {
-    Result = T1->Hash > T2->Hash;
+    Result = 1;
   }
   return Result;
 }
 
-char* ReadEntireFile(const char* Filename)
+char* ReadEntireFile(char* Filename)
 {
   char* Result = 0;
   FILE* File = fopen(Filename, "r");
@@ -643,6 +658,47 @@ char* ReadEntireFile(const char* Filename)
   return Result;
 }
 
+char* ReadMultiFiles(char* Start, char* End)
+{
+  char* Result = 0;
+  size_t RunningSize = 0;
+  while(Start < End)
+  {
+    char* Filename = Start;
+    FILE* File = fopen(Filename, "r");
+    if (File)
+    {
+      fseek(File, 0, SEEK_END);
+      long long Size = ftell(File);
+      if (Size > 0)
+      {
+        fseek(File, 0, SEEK_SET);
+        Result = (char*)realloc(Result, (size_t)Size + RunningSize + 1);
+        fread(Result + RunningSize, (size_t)Size, 1, File);
+        Result[RunningSize + (size_t)Size] = 0;
+        if (RunningSize)
+        {
+          Result[RunningSize-2] = '\n';
+          Result[RunningSize-1] = '\n';
+        }
+        RunningSize += (size_t)Size + 1;
+      }
+      else
+      {
+        fprintf(stderr, "File is empty: %s", Filename);
+      }
+      fclose(File);
+    }
+    else
+    {
+      fprintf(stderr, "Couldn't open file: %s", Filename);
+    }
+    Start += strlen(Start) + 1;
+  }
+  return Result;
+}
+
+
 static inline
 int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Settings)
 {
@@ -664,7 +720,7 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
     }
     if (!Found)
     {
-      fprintf(stderr, YELLOW("WARNING") ": Token not found in header: %.*s\n",
+      fprintf(stderr, YELLOW("WARNING") ": Token not found in header: %" PRI_STR "\n",
              Token->Value.Length, Token->Value.Chars);
     }
   }
@@ -672,7 +728,7 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
 }
 
 static inline
-int ParseFile(const char* Filename, GLArbToken* ArbHash,
+int ParseFile(char* Filename, GLArbToken* ArbHash,
                GLToken* FunctionsHash, GLToken* DefinesHash,
                GLSettings* Settings)
 {
@@ -714,7 +770,7 @@ int ParseFile(const char* Filename, GLArbToken* ArbHash,
 static
 int GenerateOpenGLHeader(GLSettings* Settings)
 {
-  char* ArbData = ReadEntireFile(Settings->Header);
+  char* ArbData = ReadMultiFiles(Settings->HeadersStart, Settings->HeadersEnd);
   FILE* Output = fopen(Settings->Output, "w");
   const char* ProcPrefix = "GEN_";
   int Success = -1;
@@ -908,7 +964,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           char Name[512];
           UpperCase(Name, ArbToken->FunctionName);
           char Buffer[512];
-          int Length = sprintf(Buffer, "typedef %.*s (APIENTRYP PFN%sPROC) %.*s\n",
+          int Length = sprintf(Buffer, "typedef %" PRI_STR " (APIENTRYP PFN%sPROC) %" PRI_STR "\n",
                                ArbToken->ReturnType.Length, ArbToken->ReturnType.Chars,
                                Name,
                                ArbToken->Parameters.Length, ArbToken->Parameters.Chars);
@@ -926,7 +982,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           if (ArbToken)
           {
             char Buffer[512];
-            int Length = sprintf(Buffer, "#define %.*s %s%.*s\n",
+            int Length = sprintf(Buffer, "#define %" PRI_STR " %s%" PRI_STR "\n",
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars,
                                  ProcPrefix,
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars);
@@ -946,7 +1002,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
             char Name[512];
             UpperCase(Name, ArbToken->FunctionName);
             char Buffer[512];
-            int Length = sprintf(Buffer, "static PFN%sPROC %s%.*s;\n", Name, ProcPrefix,
+            int Length = sprintf(Buffer, "PFN%sPROC %s%" PRI_STR ";\n", Name, ProcPrefix,
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars);
 
             fwrite(Buffer, (size_t)Length, 1, Output);
@@ -955,7 +1011,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
 
         Generated =
           "\n\n"
-          "typedef void (*%sOpenGLProc)();\n\n"
+          "typedef void (*%sOpenGLProc)(void);\n\n"
           "#ifdef _WIN32\n"
           "static HMODULE %sOpenGLHandle;\n"
           "static void %sLoadOpenGL()\n"
@@ -1047,7 +1103,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
             char Name[512];
             UpperCase(Name, ArbToken->FunctionName);
             char Buffer[512];
-            int Length = sprintf(Buffer, "  %s%.*s = (PFN%sPROC)%sOpenGLGetProc(\"%.*s\");\n",
+            int Length = sprintf(Buffer, "  %s%" PRI_STR " = (PFN%sPROC)%sOpenGLGetProc(\"%" PRI_STR "\");\n",
                                  ProcPrefix,
                                  ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars,
                                  Name, Prefix, ArbToken->FunctionName.Length, ArbToken->FunctionName.Chars);
