@@ -44,6 +44,7 @@ struct GLSettings
   int IgnoreCount;
   int Boilerplate;
   int Silent;
+  int ForceGenerate;
 };
 
 static
@@ -69,6 +70,7 @@ void PrintHelp(char** argv)
   printf("\noptional arguments:\n");
   printf("  %-20s Prints this help and exits\n", "-h");
   printf("  %-20s Suppress non error output.\n", "-silent");
+  printf("  %-20s Force generation of header (ignores updated timestamp).\n", "-force");
   printf("  %-20s Function prefix for boilerplate code.\n", "-p <prefix>");
   printf("  %-20s Ignored tokens (comma separated).\n", "-i <token1,token2>");
   printf("  %-20s Don't generate OpenGL loading boilerplate code\n", "-no-b");
@@ -98,7 +100,7 @@ int main(int argc, char** argv)
           MaxTimestamp = LastWriteTime;
         }
       }
-      if (MaxTimestamp > Settings.WriteTimestamp)
+      if (Settings.ForceGenerate || MaxTimestamp > Settings.WriteTimestamp)
       {
         Result = GenerateOpenGLHeader(&Settings);
       }
@@ -207,6 +209,10 @@ int ParseCommandLine(GLSettings* Settings, int argc, char** argv)
       else if (strcmp(Option, "p") == 0 && Index < argc-1)
       {
         Settings->Prefix = argv[++Index];
+      }
+      else if (strcmp(Option, "force") == 0)
+      {
+        Settings->ForceGenerate = 1;
       }
       else if (strcmp(Option, "no-b") == 0)
       {
@@ -1057,12 +1063,15 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           "}\n"
           "#else\n"
           "#include <dlfcn.h>\n"
-          "#include <GL/glx.h>\n"
           "\n"
           "static void *%sOpenGLHandle;\n"
+          "typedef void (*__GLXextproc)(void);\n"
+          "typedef __GLXextproc (* PFNGLXGETPROCADDRESSPROC) (const GLubyte *procName);\n"
+          "static PFNGLXGETPROCADDRESSPROC glx_get_proc_address;\n"
           "static void %sLoadOpenGL()\n"
           "{\n"
           "  %sOpenGLHandle = dlopen(\"libGL.so.1\", RTLD_LAZY | RTLD_GLOBAL);\n"
+          "  glx_get_proc_address = (PFNGLXGETPROCADDRESSPROC) dlsym(%sOpenGLHandle, \"glXGetProcAddressARB\");\n"
           "}\n"
           "static void %sUnloadOpenGL()\n"
           "{\n"
@@ -1070,7 +1079,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
           "}\n"
           "static %sOpenGLProc %sOpenGLGetProc(const char *proc)\n"
           "{\n"
-          "  %sOpenGLProc Result = (%sOpenGLProc) glXGetProcAddress((const GLubyte *) proc);\n"
+          "  %sOpenGLProc Result = (%sOpenGLProc) glx_get_proc_address((const GLubyte *) proc);\n"
           "  if (!Result)\n"
           "    Result = (%sOpenGLProc) dlsym(%sOpenGLHandle, proc);\n"
           "  return Result;\n"
