@@ -842,6 +842,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
 
     AddCustomToken(DefinesHash, "GL_MAJOR_VERSION");
     AddCustomToken(DefinesHash, "GL_MINOR_VERSION");
+    AddCustomToken(FunctionsHash, "glGetIntegerv");
 
     for (int Index = 0; Index < Settings->InputCount; ++Index)
     {
@@ -888,11 +889,11 @@ int GenerateOpenGLHeader(GLSettings* Settings)
       fprintf(Output, Generated, Settings->WriteTimestamp);
 
       Generated =
-        "struct %sOpenGLVersion\n"
+        "typedef struct %sOpenGLVersion\n"
         "{\n"
         "  int Major;\n"
         "  int Minor;\n"
-        "};\n"
+        "} %sOpenGLVersion;\n"
         "// Call this function to initialize OpenGL.\n"
         "// Example:\n"
         "//\n"
@@ -907,7 +908,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         "static void %sOpenGLInit(%sOpenGLVersion* Version);\n\n\n";
       if (Settings->Boilerplate)
       {
-        fprintf(Output, Generated, Prefix, Prefix, Prefix, Prefix, Prefix);
+        fprintf(Output, Generated, Prefix, Prefix, Prefix, Prefix, Prefix, Prefix);
       }
 
       Generated =
