@@ -1,5 +1,5 @@
 /*
-// glgen.cpp - v0.3 - Generates OpenGL header file - Public Domain
+// glgen.cpp - v0.4 - Generates OpenGL header file - Public Domain
 // Metric Panda 2016 - http://metricpanda.com
 //
 // Command line utility that generates an OpenGL header file that contains
@@ -738,7 +738,8 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
 
 static inline
 int ParseFile(char* Filename, GLArbToken* ArbHash,
-               GLToken* FunctionsHash, GLToken* DefinesHash,
+               GLToken* FunctionsHash, unsigned int* FunctionCount,
+               GLToken* DefinesHash, unsigned int* DefinesCount,
                GLSettings* Settings)
 {
   char* Data = ReadEntireFile(Filename);
@@ -755,6 +756,7 @@ int ParseFile(char* Filename, GLArbToken* ArbHash,
         if (!Contains(FunctionsHash, Token) && IsKnownOrIgnoredToken(ArbHash, &Token, Settings))
         {
           AddToken(FunctionsHash, Token);
+          *FunctionCount += 1;
         }
       }
       if (StartsWith(Token.Value, "GL_"))
@@ -762,6 +764,7 @@ int ParseFile(char* Filename, GLArbToken* ArbHash,
         if (!Contains(DefinesHash, Token) && IsKnownOrIgnoredToken(ArbHash, &Token, Settings))
         {
           AddToken(DefinesHash, Token);
+          *DefinesCount += 1;
         }
       }
     }
@@ -793,6 +796,9 @@ int GenerateOpenGLHeader(GLSettings* Settings)
     GLArbToken* ArbHash = (GLArbToken*)calloc(sizeof(GLArbToken), TOKEN_HASH_SIZE);
     GLToken* FunctionsHash = (GLToken*)calloc(sizeof(GLToken), TOKEN_HASH_SIZE);
     GLToken* DefinesHash = (GLToken*)calloc(sizeof(GLToken), TOKEN_HASH_SIZE);
+    unsigned int FunctionCount = 0;
+    unsigned int DefinesCount = 0;
+    unsigned int ArbTokenCount = 0;
 
     GLTokenizer Tokenizer;
     Tokenizer.At = ArbData;
@@ -814,6 +820,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         Token.Hash = GetStringHash(Token.Value);
         if (!GetToken(ArbHash, Token.Hash))
         {
+          ArbTokenCount++;
           GLArbToken* Result = AddToken(ArbHash, Token);
           Result->FunctionName.Chars = Token.Value.Chars;
           Result->FunctionName.Length = (unsigned int)(Tokenizer.At - Token.Value.Chars);
@@ -836,6 +843,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         Token.Hash = GetStringHash(Token.Value);
         if (!GetToken(ArbHash, Token.Hash))
         {
+          ArbTokenCount++;
           GLArbToken* Result = AddToken(ArbHash, Token);
           AdvanceToEndOfLine(&Tokenizer);
           Result->Line.Chars = Start;
@@ -844,40 +852,25 @@ int GenerateOpenGLHeader(GLSettings* Settings)
       }
     }
 
-    AddCustomToken(DefinesHash, "GL_MAJOR_VERSION");
-    AddCustomToken(DefinesHash, "GL_MINOR_VERSION");
-    AddCustomToken(FunctionsHash, "glGetIntegerv");
+    {
+      DefinesCount = 2;
+      AddCustomToken(DefinesHash, "GL_MAJOR_VERSION");
+      AddCustomToken(DefinesHash, "GL_MINOR_VERSION");
+    }
+    {
+      FunctionCount = 1;
+      AddCustomToken(FunctionsHash, "glGetIntegerv");
+    }
 
     for (int Index = 0; Index < Settings->InputCount; ++Index)
     {
-      ParseFile(Settings->Inputs[Index], ArbHash, FunctionsHash, DefinesHash, Settings);
+      ParseFile(Settings->Inputs[Index], ArbHash, FunctionsHash, &FunctionCount,
+                DefinesHash, &DefinesCount, Settings);
     }
 
     qsort(FunctionsHash, TOKEN_HASH_SIZE, sizeof(GLToken), TokenComparer);
     qsort(DefinesHash, TOKEN_HASH_SIZE, sizeof(GLToken), TokenComparer);
 
-    unsigned int FunctionCount = 0;
-    unsigned int DefinesCount = 0;
-    unsigned int ArbTokenCount = 0;
-    for (int Index = 0; Index < TOKEN_HASH_SIZE; ++Index)
-    {
-      GLToken* FunctionToken = FunctionsHash + Index;
-      GLToken* DefineToken = DefinesHash + Index;
-      GLArbToken* ArbToken = ArbHash + Index;
-      if (FunctionToken->Hash)
-      {
-        FunctionCount++;
-      }
-      if (DefineToken->Hash)
-      {
-        DefinesCount++;
-      }
-      if (ArbToken->Hash)
-      {
-        ArbTokenCount++;
-      }
-    }
-    if (FunctionCount || DefinesCount)
     {
       const char* Prefix = "";
       if (Settings->Prefix)
@@ -1144,13 +1137,6 @@ int GenerateOpenGLHeader(GLSettings* Settings)
       {
         printf(GREEN("Completed!") " " GREEN("%u") " functions - " GREEN("%u") " defines - " GREEN("%u") " ARB tokens\n",
                FunctionCount, DefinesCount, ArbTokenCount);
-      }
-    }
-    else
-    {
-      if (!Settings->Silent)
-      {
-        printf("Nothing to do");
       }
     }
   }
