@@ -470,6 +470,13 @@ GLToken ParseToken(GLTokenizer* Tokenizer)
 }
 
 static inline
+int IsUpperCase(char C)
+{
+  int Result = (C >= 'A') && (C <= 'Z');
+  return Result;
+}
+
+static inline
 int StartsWith(GLString& Token, const char* Prefix)
 {
   int Result = Token.Length > 0;
@@ -747,7 +754,7 @@ int ParseFile(char* Filename, GLArbToken* ArbHash,
     while(*Tokenizer.At)
     {
       GLToken Token = ParseToken(&Tokenizer);
-      if (StartsWith(Token.Value, "gl"))
+      if (StartsWith(Token.Value, "gl") && IsUpperCase(Token.Value.Chars[2]))
       {
         if (!Contains(FunctionsHash, Token) && IsKnownOrIgnoredToken(ArbHash, &Token, Settings))
         {
