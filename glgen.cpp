@@ -441,7 +441,6 @@ GLArbToken ParseArbToken(GLTokenizer* Tokenizer)
       Tokenizer->At++;
     }
     Token.Value.Length = (unsigned int)(Tokenizer->At - Token.Value.Chars);
-    Token.Hash = GetStringHash(Token.Value);
     if (IsWhitespace(*Tokenizer->At) && *(Tokenizer->At + 1) == '*')
     {
       Tokenizer->At += 2;
@@ -815,7 +814,8 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         unsigned int ReturnTypeLength = (unsigned int)(Tokenizer.At - ReturnType);
         ParseArbToken(&Tokenizer);
         Token = ParseArbToken(&Tokenizer);
-        if (Token.Hash && !GetToken(ArbHash, Token.Hash))
+        Token.Hash = GetStringHash(Token.Value);
+        if (!GetToken(ArbHash, Token.Hash))
         {
           GLArbToken* Result = AddToken(ArbHash, Token);
           Result->FunctionName.Chars = Token.Value.Chars;
@@ -836,7 +836,8 @@ int GenerateOpenGLHeader(GLSettings* Settings)
       {
         char* Start = Token.Value.Chars;
         Token = ParseArbToken(&Tokenizer);
-        if (Token.Hash && !GetToken(ArbHash, Token.Hash))
+        Token.Hash = GetStringHash(Token.Value);
+        if (!GetToken(ArbHash, Token.Hash))
         {
           GLArbToken* Result = AddToken(ArbHash, Token);
 
