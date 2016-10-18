@@ -803,7 +803,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
     while(*Tokenizer.At)
     {
       GLArbToken Token = ParseArbToken(&Tokenizer);
-      if (StartsWith(Token.Value, "GLAPI"))
+      if (Equal(Token.Value, "GLAPI"))
       {
         char* Start = Token.Value.Chars;
         char* ReturnType = Tokenizer.At;
