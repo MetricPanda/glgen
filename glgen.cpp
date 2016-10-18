@@ -429,23 +429,20 @@ static inline
 GLArbToken ParseArbToken(GLTokenizer* Tokenizer)
 {
   GLArbToken Token = {};
-  if (*Tokenizer->At)
+  while(*Tokenizer->At && (IsWhitespaceOrNewline(*Tokenizer->At) || !IsIdentifier(*Tokenizer->At)))
   {
-    while(*Tokenizer->At && (IsWhitespaceOrNewline(*Tokenizer->At) || !IsIdentifier(*Tokenizer->At)))
-    {
-      Tokenizer->At++;
-    }
-    Token.Value.Chars = Tokenizer->At;
-    while(*Tokenizer->At && (IsIdentifier(*Tokenizer->At)))
-    {
-      Tokenizer->At++;
-    }
-    Token.Value.Length = (unsigned int)(Tokenizer->At - Token.Value.Chars);
-    if (IsWhitespace(*Tokenizer->At) && *(Tokenizer->At + 1) == '*')
-    {
-      Tokenizer->At += 2;
-      Token.Value.Length += 2;
-    }
+    Tokenizer->At++;
+  }
+  Token.Value.Chars = Tokenizer->At;
+  while(*Tokenizer->At && (IsIdentifier(*Tokenizer->At)))
+  {
+    Tokenizer->At++;
+  }
+  Token.Value.Length = (unsigned int)(Tokenizer->At - Token.Value.Chars);
+  if (IsWhitespace(*Tokenizer->At) && *(Tokenizer->At + 1) == '*')
+  {
+    Tokenizer->At += 2;
+    Token.Value.Length += 2;
   }
   return Token;
 }
@@ -476,7 +473,7 @@ int IsUpperCase(char C)
 }
 
 static inline
-int StartsWith(GLString& Token, const char* Prefix)
+int StartsWith(GLString Token, const char* Prefix)
 {
   int Result = Token.Length > 0;
   for (unsigned int Index = 0; Index < Token.Length && *Prefix; ++Index)
@@ -491,14 +488,14 @@ int StartsWith(GLString& Token, const char* Prefix)
 }
 
 static inline
-int Equal(GLString* Token, const char* Value)
+int Equal(GLString Token, const char* Value)
 {
-  int Result = Token->Length > 0;
-  if (Token->Length)
+  int Result = Token.Length > 0;
+  if (Token.Length)
   {
-    char* Chars = Token->Chars;
+    char* Chars = Token.Chars;
     unsigned int Index = 0;
-    for (; Index < Token->Length && *Value; ++Index)
+    for (; Index < Token.Length && *Value; ++Index)
     {
       if (*Value++ != *Chars++)
       {
@@ -506,7 +503,7 @@ int Equal(GLString* Token, const char* Value)
         break;
       }
     }
-    Result = Index == Token->Length;
+    Result = Index == Token.Length;
   }
   return Result;
 }
@@ -724,7 +721,7 @@ int IsKnownOrIgnoredToken(GLArbToken* ArbHash, GLToken* Token, GLSettings* Setti
   {
     for (int IgnoredIndex = 0; IgnoredIndex < Settings->IgnoreCount; ++IgnoredIndex)
     {
-      if (Equal(&Token->Value, Settings->Ignores[IgnoredIndex]))
+      if (Equal(Token->Value, Settings->Ignores[IgnoredIndex]))
       {
         Found = 1;
         break;
@@ -807,7 +804,7 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         char* Start = Token.Value.Chars;
         char* ReturnType = Tokenizer.At;
         Token = ParseArbToken(&Tokenizer);
-        if (Equal(&Token.Value, "const"))
+        if (Equal(Token.Value, "const"))
         {
           ParseArbToken(&Tokenizer);
         }
@@ -840,7 +837,6 @@ int GenerateOpenGLHeader(GLSettings* Settings)
         if (!GetToken(ArbHash, Token.Hash))
         {
           GLArbToken* Result = AddToken(ArbHash, Token);
-
           AdvanceToEndOfLine(&Tokenizer);
           Result->Line.Chars = Start;
           Result->Line.Length = (unsigned int)(Tokenizer.At - Start);
